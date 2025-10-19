@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or '生成AI事例検索' }}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-content">
+        <h1 class="site-title"><a href="/cases">生成AI事例検索</a></h1>
+        <nav class="site-nav">
+          <a href="/cases">事例検索</a>
+          <a href="/chat">チャット検索</a>
+          <a href="/admin/import">CSV取り込み</a>
+        </nav>
+      </div>
+    </header>
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <div class="container">
+        <small>© 2024 生成AI事例検索</small>
+      </div>
+    </footer>
+  </body>
+</html>

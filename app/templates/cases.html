@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>国内生成AI事例を横断検索</h2>
+  <p class="text-muted">キーワード検索とファセットで迅速に候補を絞り込めます。</p>
+
+  <div class="form-section">
+    <form id="searchForm" class="search-bar" autocomplete="off">
+      <input type="text" id="queryInput" name="q" placeholder="例：窓口 生成AI" />
+      <div>
+        <label for="orgInput">組織名</label>
+        <input list="orgOptions" id="orgInput" name="org" placeholder="組織名で絞り込み" />
+        <datalist id="orgOptions">
+          {% for option in orgs %}
+          <option value="{{ option }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <button type="submit">検索</button>
+    </form>
+  </div>
+
+  <div class="facets">
+    <div>
+      <h3>カテゴリ</h3>
+      <div class="checkbox-list" id="categoryFilters">
+        {% for option in categories %}
+        <label>
+          <input type="checkbox" value="{{ option }}" /> {{ option }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <h3>テーマ</h3>
+      <div class="checkbox-list" id="themeFilters">
+        {% for option in themes %}
+        <label>
+          <input type="checkbox" value="{{ option }}" /> {{ option }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>タイトル</th>
+          <th>組織名</th>
+          <th>カテゴリ</th>
+          <th>テーマ</th>
+          <th>概要</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</section>
+
+<script>
+  const resultsBody = document.getElementById("resultsBody");
+  const pagination = document.getElementById("pagination");
+  const searchForm = document.getElementById("searchForm");
+  const categoryFilters = document.getElementById("categoryFilters");
+  const themeFilters = document.getElementById("themeFilters");
+  const pageSize = {{ page_size }};
+  let currentPage = 1;
+
+  async function fetchResults(page = 1) {
+    const params = new URLSearchParams();
+    const query = document.getElementById("queryInput").value.trim();
+    const org = document.getElementById("orgInput").value.trim();
+    if (query) params.append("q", query);
+    if (org) params.append("org[]", org);
+    getCheckedValues(categoryFilters).forEach(value => params.append("category[]", value));
+    getCheckedValues(themeFilters).forEach(value => params.append("theme[]", value));
+    params.append("page", page);
+    params.append("size", pageSize);
+    const response = await fetch(`/api/v1/cases?${params.toString()}`);
+    if (!response.ok) {
+      console.error("検索に失敗しました");
+      return;
+    }
+    const data = await response.json();
+    renderResults(data.items);
+    renderPagination(data.total, page);
+  }
+
+  function renderResults(items) {
+    if (!items.length) {
+      resultsBody.innerHTML = '<tr><td colspan="5">該当する事例がありません。</td></tr>';
+      return;
+    }
+    resultsBody.innerHTML = items
+      .map(item => {
+        const themes = item.themes && item.themes.length ? item.themes.map(t => `<span class="badge">${t}</span>`).join(" ") : "-";
+        const org = item.org || "-";
+        const category = item.category || "-";
+        return `
+          <tr>
+            <td><a href="${item.link}" target="_blank" rel="noopener">${item.title} ↗</a></td>
+            <td>${org}</td>
+            <td>${category}</td>
+            <td>${themes}</td>
+            <td class="case-summary">${escapeHtml(item.summary)}</td>
+          </tr>`;
+      })
+      .join("");
+  }
+
+  function renderPagination(total, page) {
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    pagination.innerHTML = "";
+    if (totalPages <= 1) return;
+    for (let p = 1; p <= totalPages; p++) {
+      const button = document.createElement("button");
+      button.textContent = p;
+      if (p === page) {
+        button.classList.add("secondary");
+        button.disabled = true;
+      }
+      button.addEventListener("click", () => {
+        currentPage = p;
+        fetchResults(currentPage);
+      });
+      pagination.appendChild(button);
+    }
+  }
+
+  function getCheckedValues(container) {
+    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(input => input.value);
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  searchForm.addEventListener("submit", event => {
+    event.preventDefault();
+    currentPage = 1;
+    fetchResults(currentPage);
+  });
+
+  categoryFilters.addEventListener("change", () => {
+    currentPage = 1;
+    fetchResults(currentPage);
+  });
+
+  themeFilters.addEventListener("change", () => {
+    currentPage = 1;
+    fetchResults(currentPage);
+  });
+
+  fetchResults(currentPage);
+</script>
+{% endblock %}
