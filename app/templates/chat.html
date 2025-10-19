@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="chat-container">
+  <h2>チャットで要点を素早く把握</h2>
+  <p class="text-muted">質問に対して関連する事例を根拠付きで返します。</p>
+
+  <form id="chatForm" class="form-section">
+    <label for="questionInput">質問内容</label>
+    <textarea id="questionInput" rows="4" placeholder="例：製造業で議事録要約の国内事例は？" required></textarea>
+
+    <div class="facets">
+      <div>
+        <h3>カテゴリ</h3>
+        <div class="checkbox-list" id="chatCategoryFilters">
+          {% for option in categories %}
+          <label>
+            <input type="checkbox" value="{{ option }}" /> {{ option }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h3>テーマ</h3>
+        <div class="checkbox-list" id="chatThemeFilters">
+          {% for option in themes %}
+          <label>
+            <input type="checkbox" value="{{ option }}" /> {{ option }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <h3>組織名</h3>
+        <input list="chatOrgOptions" id="chatOrgInput" placeholder="任意" />
+        <datalist id="chatOrgOptions">
+          {% for option in orgs %}
+          <option value="{{ option }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+
+    <div style="margin-top: 1rem;">
+      <button type="submit">検索する</button>
+    </div>
+  </form>
+
+  <div class="chat-log" id="chatLog">
+    <p class="text-muted">質問を入力して検索を開始してください。</p>
+  </div>
+</section>
+
+<script>
+  const chatForm = document.getElementById("chatForm");
+  const chatLog = document.getElementById("chatLog");
+  const categoryFilters = document.getElementById("chatCategoryFilters");
+  const themeFilters = document.getElementById("chatThemeFilters");
+
+  chatForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const question = document.getElementById("questionInput").value.trim();
+    if (!question) return;
+    chatLog.innerHTML = '<p>検索中です…</p>';
+
+    const payload = {
+      messages: [{ role: "user", content: question }],
+      filters: {
+        category: getCheckedValues(categoryFilters),
+        theme: getCheckedValues(themeFilters),
+        org: getOrgFilter(),
+      },
+    };
+
+    const response = await fetch("/api/v1/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      chatLog.innerHTML = '<p>検索中にエラーが発生しました。</p>';
+      return;
+    }
+
+    const data = await response.json();
+    renderChatResult(data, question);
+  });
+
+  function getCheckedValues(container) {
+    return Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+  }
+
+  function getOrgFilter() {
+    const value = document.getElementById("chatOrgInput").value.trim();
+    return value ? [value] : [];
+  }
+
+  function renderChatResult(data, question) {
+    const citations = (data.citations || [])
+      .map((item, index) => `<li>[${index + 1}] <a href="${item.link}" target="_blank" rel="noopener">${item.title}</a></li>`)
+      .join("");
+    chatLog.innerHTML = `
+      <div class="chat-entry">
+        <h3>質問</h3>
+        <p>${escapeHtml(question)}</p>
+      </div>
+      <div class="chat-entry">
+        <h3>回答</h3>
+        <p>${escapeHtml(data.answer || '')}</p>
+        <h4>引用</h4>
+        <ul class="citation-list">${citations || '<li>該当なし</li>'}</ul>
+      </div>
+    `;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+</script>
+{% endblock %}

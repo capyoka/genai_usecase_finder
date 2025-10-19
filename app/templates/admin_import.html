@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+  <h2>CSV取り込み（先頭100行プレビュー付き）</h2>
+  <p class="text-muted">CSVをドラッグ＆ドロップ、またはファイル選択して即座にインポートできます。</p>
+
+  <div id="dropZone" class="upload-panel">
+    <p>CSVファイルをここにドラッグ＆ドロップ、または下のボタンから選択</p>
+    <input type="file" id="fileInput" accept=".csv" />
+  </div>
+
+  <div class="form-section" style="display: flex; gap: 1rem;">
+    <button id="previewButton" class="secondary" disabled>先頭100行をプレビュー</button>
+    <button id="importButton" disabled>取り込み開始</button>
+  </div>
+
+  <div class="preview-table" id="previewTable"></div>
+  <div class="status-message" id="statusMessage"></div>
+</section>
+
+<script>
+  const fileInput = document.getElementById("fileInput");
+  const dropZone = document.getElementById("dropZone");
+  const previewButton = document.getElementById("previewButton");
+  const importButton = document.getElementById("importButton");
+  const previewTable = document.getElementById("previewTable");
+  const statusMessage = document.getElementById("statusMessage");
+  let selectedFile = null;
+
+  fileInput.addEventListener("change", (event) => {
+    if (event.target.files.length) {
+      handleFile(event.target.files[0]);
+    }
+  });
+
+  dropZone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("dragover");
+    if (event.dataTransfer.files.length) {
+      handleFile(event.dataTransfer.files[0]);
+    }
+  });
+
+  previewButton.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    await previewCsv();
+  });
+
+  importButton.addEventListener("click", async () => {
+    if (!selectedFile) return;
+    await importCsv();
+  });
+
+  function handleFile(file) {
+    selectedFile = file;
+    statusMessage.textContent = `選択中: ${file.name}`;
+    previewButton.disabled = false;
+    importButton.disabled = false;
+    previewTable.innerHTML = "";
+  }
+
+  async function previewCsv() {
+    statusMessage.textContent = "プレビューを取得中…";
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    const response = await fetch("/api/v1/admin/import?preview=true", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      statusMessage.textContent = "プレビューの取得に失敗しました";
+      return;
+    }
+    const data = await response.json();
+    renderPreview(data.rows || []);
+    statusMessage.textContent = `プレビュー件数: ${(data.rows || []).length} 行`;
+  }
+
+  async function importCsv() {
+    statusMessage.textContent = "取り込み中…";
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    const response = await fetch("/api/v1/admin/import", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      statusMessage.textContent = "取り込みに失敗しました";
+      return;
+    }
+    const data = await response.json();
+    statusMessage.textContent = `取り込み完了: 全${data.total_rows}行中 ${data.imported}件登録 / ${data.skipped}件スキップ`;
+    previewTable.innerHTML = "";
+  }
+
+  function renderPreview(rows) {
+    if (!rows.length) {
+      previewTable.innerHTML = '<p>プレビューできる行がありません。</p>';
+      return;
+    }
+    const header = `
+      <thead>
+        <tr>
+          <th>カテゴリ</th>
+          <th>組織名</th>
+          <th>タイトル</th>
+          <th>概要</th>
+          <th>テーマ</th>
+          <th>リンク</th>
+        </tr>
+      </thead>`;
+    const body = rows
+      .map((row) => `
+        <tr>
+          <td>${escapeHtml(row.category || "-")}</td>
+          <td>${escapeHtml(row.org || "-")}</td>
+          <td>${escapeHtml(row.title)}</td>
+          <td>${escapeHtml(row.summary || "-")}</td>
+          <td>${(row.themes || []).map((t) => `<span class="badge">${escapeHtml(t)}</span>`).join(" ")}</td>
+          <td><a href="${row.link}" target="_blank" rel="noopener">リンク ↗</a></td>
+        </tr>`)
+      .join("");
+    previewTable.innerHTML = `<table>${header}<tbody>${body}</tbody></table>`;
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+</script>
+{% endblock %}
